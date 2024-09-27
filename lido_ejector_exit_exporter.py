@@ -12,7 +12,7 @@ from typing import Any
 
 
 def read_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Exporter of notifier updates.")
+    parser = argparse.ArgumentParser(description="Exporter for notifying exits.")
     parser.add_argument(
         "--webhook_port",
         metavar="WEBHOOK_PORT",
