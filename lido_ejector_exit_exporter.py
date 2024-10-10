@@ -106,13 +106,13 @@ def exporter(notify: Synchronized[int], args: argparse.Namespace) -> None:
 
 
 if __name__ == "__main__":
-    mp.set_start_method("fork")
+    mp.set_start_method("spawn")
     notify: Synchronized[int] = mp.Value("i", 0)
     cmd_args: argparse.Namespace = read_args()
-    p_webhook = mp.Process(target=webhook, args=(notify, cmd_args))
-    p_exporter = mp.Process(target=exporter, args=(notify, cmd_args))
-    p_webhook.start()
-    p_exporter.start()
-    p_webhook.join()
-    p_exporter.join()
-    raise SystemExit("UNEXPECTED, webhook and exporter stopped.")
+    p = mp.Process(target=webhook, args=(notify, cmd_args))
+    p.daemon = True
+    p.start()
+    p = mp.Process(target=exporter, args=(notify, cmd_args))
+    p.daemon = True
+    p.start()
+    p.join()
