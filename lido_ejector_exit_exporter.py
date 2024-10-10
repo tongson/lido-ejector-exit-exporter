@@ -74,22 +74,22 @@ class Hook(BaseHTTPRequestHandler):
             nlog.write("\n")
 
 
-def notifier(notify: Synchronized[int], args: argparse.Namespace) -> None:
+def webhook(notify: Synchronized[int], args: argparse.Namespace) -> None:
     handler = partial(Hook, notify)
     httpd = HTTPServer(("127.0.0.1", args.webhook_port), handler)
     try:
         httpd.serve_forever()
     except Exception as e:
-        e.add_note("\n Exception at notifier()")
+        e.add_note("\n Exception at webhook()")
         raise SystemExit("Error starting webhook HTTP server.")
 
-def prom(notify: Synchronized[int], args: argparse.Namespace) -> None:
+def exporter(notify: Synchronized[int], args: argparse.Namespace) -> None:
     for coll in list(REGISTRY._collector_to_names.keys()):
         REGISTRY.unregister(coll)
     try:
         prometheus_client.start_http_server(args.exporter_port)
     except Exception as e:
-        e.add_note("\n Exception at prom()")
+        e.add_note("\n Exception at exporter()")
         raise SystemExit("Error starting exporter HTTP server.")
     else:
         register = prometheus_client.Gauge(
@@ -109,9 +109,9 @@ if __name__ == "__main__":
     mp.set_start_method("fork")
     notify: Synchronized[int] = mp.Value("i", 0)
     cmd_args: argparse.Namespace = read_args()
-    p1 = mp.Process(target=notifier, args=(notify, cmd_args))
-    p2 = mp.Process(target=prom, args=(notify, cmd_args))
-    p1.start()
-    p2.start()
-    p1.join()
-    p2.join()
+    p_webhook = mp.Process(target=webhook, args=(notify, cmd_args))
+    p_exporter = mp.Process(target=exporter, args=(notify, cmd_args))
+    p_webhook.start()
+    p_exporter.start()
+    p_webhook.join()
+    p_exporter.join()
