@@ -6,35 +6,40 @@ from prometheus_client import REGISTRY
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from datetime import datetime
 from functools import partial
-from multiprocessing import Process, Value
+import multiprocessing as mp
 from multiprocessing.sharedctypes import Synchronized
 from typing import Any
 
 
 def read_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Exporter for notifying exits.")
-    parser.add_argument(
-        "--webhook_port",
-        metavar="WEBHOOK_PORT",
-        type=int,
-        default=8099,
-        help="The listening port for the webhook. Default is 8099.",
-    )
-    parser.add_argument(
-        "--exporter_port",
-        metavar="EXPORTER_PORT",
-        type=int,
-        default=9099,
-        help="The listening port for exporting the metrics. Default is 9099.",
-    )
-    parser.add_argument(
-        "--freq",
-        metavar="SEC",
-        type=int,
-        default=300,
-        help="Update frequency in seconds. Default is 300 seconds (5 minutes).",
-    )
-    return parser.parse_args()
+    try:
+        parser = argparse.ArgumentParser(description="Exporter for notifying exits.")
+    except Exception as e:
+        e.add_note("\n Exception at read_args()")
+        raise SystemExit("Error parsing arguments.")
+    else:
+        parser.add_argument(
+            "--webhook_port",
+            metavar="WEBHOOK_PORT",
+            type=int,
+            default=8099,
+            help="The listening port for the webhook. Default is 8099.",
+        )
+        parser.add_argument(
+            "--exporter_port",
+            metavar="EXPORTER_PORT",
+            type=int,
+            default=9099,
+            help="The listening port for exporting the metrics. Default is 9099.",
+        )
+        parser.add_argument(
+            "--freq",
+            metavar="SEC",
+            type=int,
+            default=300,
+            help="Update frequency in seconds. Default is 300 seconds (5 minutes).",
+        )
+        return parser.parse_args()
 
 
 class Hook(BaseHTTPRequestHandler):
@@ -69,25 +74,23 @@ class Hook(BaseHTTPRequestHandler):
             nlog.write("\n")
 
 
-def notifier(notify: Synchronized[int]) -> None:
-    args = read_args()
+def notifier(notify: Synchronized[int], args: argparse.Namespace) -> None:
     handler = partial(Hook, notify)
     httpd = HTTPServer(("127.0.0.1", args.webhook_port), handler)
     try:
         httpd.serve_forever()
     except Exception as e:
-        e.add_note("\nError starting webhook HTTP server.")
-        raise
+        e.add_note("\n Exception at notifier()")
+        raise SystemExit("Error starting webhook HTTP server.")
 
-def prom(notify: Synchronized[int]) -> None:
-    args = read_args()
+def prom(notify: Synchronized[int], args: argparse.Namespace) -> None:
     for coll in list(REGISTRY._collector_to_names.keys()):
         REGISTRY.unregister(coll)
     try:
         prometheus_client.start_http_server(args.exporter_port)
     except Exception as e:
-        e.add_note("\nError starting exporter HTTP server.")
-        raise
+        e.add_note("\n Exception at prom()")
+        raise SystemExit("Error starting exporter HTTP server.")
     else:
         register = prometheus_client.Gauge(
             "lido_ejector_exit",
@@ -103,9 +106,11 @@ def prom(notify: Synchronized[int]) -> None:
 
 
 if __name__ == "__main__":
-    notify: Synchronized[int] = Value("i", 0)
-    p1 = Process(target=notifier, args=(notify,))
-    p2 = Process(target=prom, args=(notify,))
+    mp.set_start_method("fork")
+    notify: Synchronized[int] = mp.Value("i", 0)
+    cmd_args: argparse.Namespace = read_args()
+    p1 = mp.Process(target=notifier, args=(notify, cmd_args))
+    p2 = mp.Process(target=prom, args=(notify, cmd_args))
     p1.start()
     p2.start()
     p1.join()
