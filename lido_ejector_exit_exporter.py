@@ -115,3 +115,4 @@ if __name__ == "__main__":
     p_exporter.start()
     p_webhook.join()
     p_exporter.join()
+    raise SystemExit("UNEXPECTED, webhook and exporter stopped.")
