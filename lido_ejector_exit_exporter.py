@@ -107,6 +107,10 @@ def exporter(notify: Synchronized[int], args: argparse.Namespace) -> None:
 
 if __name__ == "__main__":
     mp.set_start_method("spawn", force=True)
+    def reap() -> None:
+        for p in mp.active_children():
+            p.terminate()
+            p.close()
     notify: Synchronized[int] = mp.Value("i", 0)
     cmd_args: argparse.Namespace = read_args()
     pw = mp.Process(target=webhook, args=(notify, cmd_args))
@@ -116,11 +120,9 @@ if __name__ == "__main__":
     while True:
         pw.join(1)
         if pw.exitcode is not None:
-            pe.terminate()
-            pe.close()
+            reap()
             raise SystemExit(255)
         pe.join(1)
         if pe.exitcode is not None:
-            pw.terminate()
-            pw.close()
+            reap()
             raise SystemExit(255)
