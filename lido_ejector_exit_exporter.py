@@ -122,5 +122,5 @@ if __name__ == "__main__":
         pe.join(1)
         if pe.exitcode is not None:
             pw.terminate()
-            pe.close()
+            pw.close()
             raise SystemExit(255)
