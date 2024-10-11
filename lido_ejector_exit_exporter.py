@@ -74,24 +74,22 @@ class Hook(BaseHTTPRequestHandler):
             nlog.write("\n")
 
 
-def webhook(notify: Synchronized[int], args: argparse.Namespace, fail: Synchronized[int]) -> None:
+def webhook(notify: Synchronized[int], args: argparse.Namespace) -> None:
     handler = partial(Hook, notify)
     httpd = HTTPServer(("127.0.0.1", args.webhook_port), handler)
     try:
         httpd.serve_forever()
     except Exception as e:
         e.add_note("\n Exception at webhook()")
-        fail.value = int(1)
         raise SystemExit("Error starting webhook HTTP server.")
 
-def exporter(notify: Synchronized[int], args: argparse.Namespace, fail: Synchronized[int]) -> None:
+def exporter(notify: Synchronized[int], args: argparse.Namespace) -> None:
     for coll in list(REGISTRY._collector_to_names.keys()):
         REGISTRY.unregister(coll)
     try:
         prometheus_client.start_http_server(args.exporter_port)
     except Exception as e:
         e.add_note("\n Exception at exporter()")
-        fail.value = int(1)
         raise SystemExit("Error starting exporter HTTP server.")
     else:
         register = prometheus_client.Gauge(
@@ -110,17 +108,19 @@ def exporter(notify: Synchronized[int], args: argparse.Namespace, fail: Synchron
 if __name__ == "__main__":
     mp.set_start_method("spawn", force=True)
     notify: Synchronized[int] = mp.Value("i", 0)
-    fail: Synchronized[int] = mp.Value("i", 0)
     cmd_args: argparse.Namespace = read_args()
-    pw = mp.Process(target=webhook, args=(notify, cmd_args, fail))
-    pe = mp.Process(target=exporter, args=(notify, cmd_args, fail))
+    pw = mp.Process(target=webhook, args=(notify, cmd_args))
+    pe = mp.Process(target=exporter, args=(notify, cmd_args))
     pw.start()
     pe.start()
-    # Have to wait a while for children to start
-    # A janky sleep works simplest
-    time.sleep(1)
-    if fail.value == 1:
-        for p in mp.active_children():
-            p.terminate()
-            p.join()
-            p.close()
+    while True:
+        pw.join(1)
+        if pw.exitcode is not None:
+            pe.terminate()
+            pe.close()
+            break
+        pe.join(1)
+        if pe.exitcode is not None:
+            pw.terminate()
+            pe.close()
+            break
