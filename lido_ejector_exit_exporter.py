@@ -110,6 +110,7 @@ if __name__ == "__main__":
     def reap() -> None:
         for p in mp.active_children():
             p.terminate()
+            p.join()
             p.close()
     notify: Synchronized[int] = mp.Value("i", 0)
     cmd_args: argparse.Namespace = read_args()
