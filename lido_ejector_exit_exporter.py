@@ -118,9 +118,9 @@ if __name__ == "__main__":
         if pw.exitcode is not None:
             pe.terminate()
             pe.close()
-            break
+            raise SystemExit(255)
         pe.join(1)
         if pe.exitcode is not None:
             pw.terminate()
             pe.close()
-            break
+            raise SystemExit(255)
